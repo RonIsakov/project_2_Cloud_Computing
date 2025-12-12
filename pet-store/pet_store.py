@@ -623,11 +623,18 @@ def update_pet(pet_type_id, pet_name):
         if 'name' not in data or not data['name'] or not data['name'].strip():
             return jsonify({"error": "Malformed data"}), 400
 
-        payload_name = data['name']
+        new_name = data['name']
 
-        # Validate that the name in the URL matches the name in the payload
-        if payload_name != pet_name:
-            return jsonify({"error": "Malformed data"}), 400
+        # If name is changing, check that new name doesn't already exist
+        if new_name != pet_name:
+            # Check if new name already exists for this pet-type (case-insensitive)
+            existing_pet = pets_collection.find_one({
+                "pet_type_id": pet_type_id,
+                "name": {"$regex": f"^{new_name}$", "$options": "i"}
+            })
+
+            if existing_pet:
+                return jsonify({"error": "Malformed data"}), 400
 
         # Optional fields: birthdate, picture_url
         # If not provided, keep the current values
@@ -649,15 +656,15 @@ def update_pet(pet_type_id, pet_name):
             if old_picture and old_picture != "NA":
                 delete_image_file(old_picture)
 
-            # Download new picture
-            picture_filename = download_and_save_image(picture_url, pet_name)
+            # Download new picture with new name
+            picture_filename = download_and_save_image(picture_url, new_name)
             if not picture_filename:
                 # Image download failed, use "NA"
                 picture_filename = "NA"
 
         # Create updated pet object
         updated_pet = {
-            "name": pet_name,
+            "name": new_name,
             "pet_type_id": pet_type_id,
             "birthdate": birthdate,
             "picture": picture_filename
@@ -669,9 +676,24 @@ def update_pet(pet_type_id, pet_name):
             {"$set": updated_pet}
         )
 
+        # If name changed, update pet-type's pets array
+        if new_name != pet_name:
+            pet_types_collection.update_one(
+                {"id": pet_type_id},
+                {
+                    "$pull": {"pets": pet_name},  # Remove old name
+                }
+            )
+            pet_types_collection.update_one(
+                {"id": pet_type_id},
+                {
+                    "$push": {"pets": new_name}  # Add new name
+                }
+            )
+
         print(f"Updated pet: {updated_pet}")
         # Remove pet_type_id from response
-        response_obj = {"name": pet_name, "birthdate": birthdate, "picture": picture_filename}
+        response_obj = {"name": new_name, "birthdate": birthdate, "picture": picture_filename}
         return jsonify(response_obj), 200
 
     except Exception as e:
