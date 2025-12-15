@@ -3,6 +3,7 @@ from flask import Flask, jsonify, request
 import requests
 import os
 import random
+import re
 from pymongo import MongoClient, ReturnDocument
 
 app = Flask(__name__)
@@ -16,14 +17,14 @@ transactions_collection = db['transactions']
 # Counter for purchase IDs
 counters_collection = db['counters']
 
+# Owner password from environment variable
+OWNER_PASSWORD = os.getenv('OWNER_PASSWORD')
+
 # Pet-store service URLs
 PET_STORE_URLS = {
     1: "http://pet-store1:8000",
     2: "http://pet-store2:8000"
 }
-
-# Owner password
-OWNER_PASSWORD = "LovesPetsL2M3n4"
 
 def get_next_purchase_id():
     """Get next purchase ID using MongoDB counter"""
@@ -96,7 +97,7 @@ def select_pet(pet_type_id, store=None, pet_name=None):
             if response.status_code == 200:
                 pets = response.json()
                 if pets:
-                    return random.choice(pets), try_store
+                    return random.choice(pets), 2
         except Exception as e:
             print(f"Error getting pets from store {try_store}: {e}")
             continue
@@ -146,12 +147,11 @@ def create_purchase():
         # Generate purchase ID
         purchase_id = get_next_purchase_id()
 
-        # Create transaction record (store ALL fields including pet-name)
+        # Create transaction record (only 4 fields - NO pet-name per PDF page 9)
         transaction = {
             "purchaser": purchaser,
             "pet-type": pet_type_name,
             "store": selected_store,
-            "pet-name": selected_pet_name,
             "purchase-id": purchase_id
         }
 
@@ -160,6 +160,9 @@ def create_purchase():
 
         # Remove MongoDB _id before returning
         transaction.pop('_id', None)
+
+        # Add pet-name to response for customer (purchase object has 5 fields)
+        transaction["pet-name"] = selected_pet_name
 
         print(f"Purchase completed: {transaction}")
         return jsonify(transaction), 201
@@ -178,27 +181,37 @@ def get_transactions():
         if owner_pc != OWNER_PASSWORD:
             return jsonify({"error": "Unauthorized"}), 401
 
-        # Build query from ALL query string parameters dynamically
+        # Define allowed query
+        ALLOWED_QUERY_FIELDS = {'purchaser', 'pet-type', 'store', 'purchase-id'}
+
+        # Build query from query string parameters
         query = {}
 
-        # Iterate through all query parameters
-        for field, value in request.args.items():
-            # Convert 'store' to integer
-            if field == 'store':
-                query[field] = int(value)
-            # Case-insensitive match for string fields
-            elif field in ['purchaser', 'pet-type', 'purchase-id']:
-                query[field] = {"$regex": f"^{value}$", "$options": "i"}
-            else:
-                # For any other field, use exact match
-                query[field] = value
+        # Check for invalid query parameters first
+        invalid_fields = set(request.args.keys()) - ALLOWED_QUERY_FIELDS
+        if invalid_fields:
+            return jsonify({"error": "Malformed data"}), 400
 
+        # Iterate through query parameters
+        for field, value in request.args.items():
+            if field == 'store':
+                # Validate that store is a valid integer
+                try:
+                    store_value = int(value)
+                    # Validate it's 1 or 2
+                    if store_value not in [1, 2]:
+                        return jsonify({"error": "Malformed data"}), 400
+                    query[field] = store_value
+                except ValueError:
+                    return jsonify({"error": "Malformed data"}), 400
+            elif field in ['purchaser', 'pet-type', 'purchase-id']:
+                # Case-insensitive match for string fields
+                # Escape special regex characters to prevent regex injection
+                escaped_value = re.escape(value)
+                query[field] = {"$regex": f"^{escaped_value}$", "$options": "i"}
+    
         # Query MongoDB
         transactions = list(transactions_collection.find(query, {'_id': 0}))
-
-        # Remove pet-name from response (but keep in database)
-        for transaction in transactions:
-            transaction.pop('pet-name', None)
 
         print(f"Retrieved {len(transactions)} transactions with query: {query}")
         return jsonify(transactions), 200

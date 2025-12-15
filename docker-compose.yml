@@ -30,6 +30,7 @@ services:
     environment:
       - MONGO_URI=mongodb://mongodb-stores:27017/pet_store
       - STORE_ID=1
+      - OWNER_PASSWORD=LovesPetsL2M3n4
     volumes:
       - pet-images-store1:/app/pictures
     networks:
@@ -47,6 +48,7 @@ services:
     environment:
       - MONGO_URI=mongodb://mongodb-stores:27017/pet_store
       - STORE_ID=2
+      - OWNER_PASSWORD=LovesPetsL2M3n4   
     volumes:
       - pet-images-store2:/app/pictures
     networks:
@@ -62,6 +64,7 @@ services:
     ports:
       - "5003:8080"
     environment:
+      - OWNER_PASSWORD=LovesPetsL2M3n4
       - MONGO_URI=mongodb://mongodb-transactions:27017/pet_store
     networks:
       - petstore-network
