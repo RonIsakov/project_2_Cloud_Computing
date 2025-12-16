@@ -11,6 +11,15 @@ services:
       - petstore-network
     restart: always
 
+  reverse:
+    build: ./
+    ports:
+      - "80:80" 
+    depends_on:
+      - pet-store1
+      - pet-store2
+      - pet-order1
+      
   # MongoDB for Transactions (1 collection: transactions)
   mongodb-transactions:
     image: mongo:7.0
