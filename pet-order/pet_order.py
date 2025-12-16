@@ -142,6 +142,15 @@ def create_purchase():
         store = data.get('store', None)  # Optional
         pet_name = data.get('pet-name', None)  # Optional
 
+        # Validate and convert store to integer if provided
+        if store is not None:
+            try:
+                store = int(store)
+                if store not in [1, 2]:
+                    return jsonify({"error": "Malformed data"}), 400
+            except (ValueError, TypeError):
+                return jsonify({"error": "Malformed data"}), 400
+
         # Handle store-specific vs. cross-store search
         if store:
             # Store specified - search only that store
