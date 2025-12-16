@@ -16,11 +16,14 @@ services:
   reverse:
     build: ./
     ports:
-      - "80:80" 
+      - "80:80"
+    networks:
+      - petstore-network
     depends_on:
       - pet-store1
       - pet-store2
       - pet-order1
+      - pet-order2
       
   # MongoDB for Transactions (1 collection: transactions)
   mongodb-transactions:
@@ -95,9 +98,9 @@ services:
 
   pet-order2:
     build: ./pet-order
-    container_name: pet-order1
+    container_name: pet-order2
     ports:
-      - "5003:8080"
+      - "5004:8080"
     expose:
       - 8080
     environment:
